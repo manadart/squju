@@ -24,6 +24,10 @@ func (m *migration) migrate() error {
 		}
 	}
 
+	if err := txn.Commit(); err != nil {
+		log.Fatalln(err)
+	}
+
 	log.Println("Migration successfully applied.")
 	return nil
 }

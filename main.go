@@ -7,7 +7,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-const fileName = "sqlite.db"
+const fileName = "juju.db"
 
 func main() {
 	db, err := sql.Open("sqlite3", fileName)
