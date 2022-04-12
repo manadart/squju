@@ -2,7 +2,7 @@
 Juju DB Schema Definition for SQLite
 
 ## Updating the Schema 
-- Edit the DDL in `migration.go`.
+- Edit the DDL file `schema.ddl`.
 - Execute `go run .`.
 
 ## Visualisation
