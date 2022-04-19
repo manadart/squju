@@ -162,7 +162,6 @@ ON subnet (id);
  */
 CREATE TABLE IF NOT EXISTS application (
 	uuid					TEXT PRIMARY KEY,
-	id						TEXT NOT NULL,
 	name					TEXT,
 	series					TEXT,
 	subordinate				BOOLEAN,
@@ -185,35 +184,100 @@ CREATE TABLE IF NOT EXISTS application (
 	-- exposed_endpoints
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_application_id
-ON application (id);
-
 CREATE TABLE IF NOT EXISTS application_offer (
-	uuid			TEXT PRIMARY KEY,
-	id				TEXT NOT NULL,
-	name			TEXT,
-	application_id	TEXT NOT NULL,
+	uuid				TEXT PRIMARY KEY,
+	name				TEXT,
+	application_uuid	TEXT NOT NULL,
 	-- application_description
-	CONSTRAINT		fk_application_offer_application
-		FOREIGN KEY	(application_id)
-		REFERENCES	application(id)
+	CONSTRAINT			fk_application_offer_application
+		FOREIGN KEY		(application_uuid)
+		REFERENCES		application(uuid)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_application_offer_id
-ON application_offer (id)
-
 CREATE TABLE IF NOT EXISTS endpoint_binding (
-	uuid			TEXT PRIMARY KEY,
-	application_id	TEXT NOT NULL,
-	space_id		TEXT NOT NULL,
-	endpoint_name	TEXT NOT NULL,
-	CONSTRAINT		fk_endpoint_binding_application
-		FOREIGN KEY	(application_id)
-		REFERENCES	application(id),
-	CONSTRAINT		fk_endpoint_binding_space
-		FOREIGN KEY	(space_id)
-		REFERENCES	space(id)
+	uuid				TEXT PRIMARY KEY,
+	application_uuid	TEXT NOT NULL,
+	space_id			TEXT NOT NULL,
+	endpoint_name		TEXT NOT NULL,
+	CONSTRAINT			fk_endpoint_binding_application
+		FOREIGN KEY		(application_uuid)
+		REFERENCES		application(uuid)
+	CONSTRAINT			fk_endpoint_binding_space
+		FOREIGN KEY		(space_id)
+		REFERENCES		space(id)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_endpoint_binding_aid_ename
-ON endpoint_binding (application_id, endpoint_name)
+ON endpoint_binding (application_uuid, endpoint_name)
+
+/*
+ * Link Layer Device
+ */
+CREATE TABLE IF NOT EXISTS link_layer_device (
+	uuid				TEXT PRIMARY KEY,
+	provider_id			TEXT,
+	name				TEXT,
+	mtu					INT,
+	machine_id			TEXT NOT NULL,
+	type				TEXT,
+	macaddress			TEXT,
+	is_auto_start		BOOLEAN,
+	is_up				BOOLEAN,
+	parent_name			TEXT,
+	virtual_port_type	TEXT,
+	CONSTRAINT			fk_link_layer_device_machine
+		FOREIGN KEY		(machine_id)
+		REFERENCES		machine(id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_link_layer_device_provider_id
+ON link_layer_device (provider_id);
+
+/*
+ * IP Address
+ */
+CREATE TABLE IF NOT EXISTS ip_address (
+	uuid					TEXT PRIMARY KEY,
+	provider_id				TEXT,
+	provider_subnet_id		TEXT,
+	device_name				TEXT,
+	machine_id				TEXT NOT NULL,
+	link_layer_device_uuid	TEXT NOT NULL,
+	subnet_cidr				TEXT,
+	config_method			TEXT,
+	value					TEXT,
+	gateway_address			TEXT,
+	is_default_gateway		BOOLEAN,
+	origin					TEXT,
+	is_shadow				BOOLEAN,
+	is_secondary			BOOLEAN,
+	-- provider_network_id
+	-- TODO: Shall we include this field, or can we drop and access via subnet?
+	CONSTRAINT				fk_ip_address_subnet
+		FOREIGN KEY			(provider_subnet_id)
+		REFERENCES			subnet(provider_id),
+	CONSTRAINT				fk_ip_address_link_layer_device
+		FOREIGN KEY			(link_layer_device_uuid)
+		REFERENCES			link_layer_device(uuid)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ip_address_provider_id
+ON ip_address (provider_id);
+
+CREATE TABLE IF NOT EXISTS dns_server (
+	uuid					TEXT PRIMARY KEY,
+	ip_address_uuid			TEXT NOT NULL,
+	dns_server				TEXT,
+	CONSTRAINT				fk_dns_server_ip_address
+		FOREIGN KEY			(ip_address_uuid)
+		REFERENCES			ip_address(uuid)
+);
+
+CREATE TABLE IF NOT EXISTS dns_search_domain (
+	uuid					TEXT PRIMARY KEY,
+	ip_address_uuid			TEXT NOT NULL,
+	dns_search_domain		TEXT,
+	CONSTRAINT				fk_dns_search_domain_ip_address
+		FOREIGN KEY			(ip_address_uuid)
+		REFERENCES			ip_address(uuid)
+);
