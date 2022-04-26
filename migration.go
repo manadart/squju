@@ -8,7 +8,8 @@ import (
 )
 
 type migration struct {
-	db *sql.DB
+	db            *sql.DB
+	migrationFile string
 }
 
 func (m *migration) migrate() error {
@@ -40,7 +41,7 @@ func (m *migration) migrate() error {
 }
 
 func (m *migration) statements() ([]string, error) {
-	bytes, err := ioutil.ReadFile("schema.ddl")
+	bytes, err := ioutil.ReadFile(m.migrationFile)
 	if err != nil {
 		return nil, err
 	}
