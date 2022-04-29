@@ -79,36 +79,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_cloud_ca_cert_cid_ccid
 ON cloud_ca_cert (cloud_uuid, ca_cert_uuid);
 
 /*
- * Cloud Credentials
- */
-CREATE TABLE IF NOT EXISTS cloud_credential (
-	uuid			TEXT PRIMARY KEY,
-	cloud_uuid		TEXT NOT NULL,
-	name			TEXT,
-	auth_type_id	INT NOT NULL,
-	revoked			BOOLEAN,
-	invalid			BOOLEAN,
-	invalid_reason	TEXT,
-	-- owner
-	CONSTRAINT		fk_cloud_credential_cloud
-		FOREIGN KEY	(cloud_uuid)
-		REFERENCES	cloud(uuid),
-	CONSTRAINT		fk_cloud_credential_auth_type
-		FOREIGN KEY	(auth_type_id)
-		REFERENCES	auth_type(id)
-);
-
-CREATE TABLE IF NOT EXISTS cloud_credential_attribute (
-	uuid					TEXT PRIMARY KEY,
-	cloud_credential_uuid	TEXT NOT NULL,
-	key						TEXT,
-	value					TEXT,
-	CONSTRAINT				fk_cloud_credential_attribute_cloud_credential
-		FOREIGN KEY			(cloud_credential_uuid)
-		REFERENCES			cloud_credential(uuid)
-);
-
-/*
  * Controllers
  */
 CREATE TABLE IF NOT EXISTS controller (
@@ -119,6 +89,32 @@ CREATE TABLE IF NOT EXISTS controller (
 		FOREIGN KEY	(cloud_uuid)
 		REFERENCES	cloud(uuid)
 )
+
+CREATE TABLE IF NOT EXISTS api_host_port (
+	uuid			TEXT PRIMARY KEY,
+	value			TEXT,
+	address_type	TEXT,
+	scope			TEXT,
+	port			INT,
+	space_id		TEXT, -- TODO: Investigate this field
+	controller_uuid	TEXT NOT NULL,
+	CONSTRAINT		fk_api_host_port_controller
+		FOREIGN KEY	(controller_uuid)
+		REFERENCES	controller(uuid)
+);
+
+CREATE TABLE IF NOT EXISTS api_host_port_for_agents (
+	uuid			TEXT PRIMARY KEY,
+	value			TEXT,
+	address_type	TEXT,
+	scope			TEXT,
+	port			INT,
+	space_id		TEXT, -- TODO: Investigate this field
+	controller_uuid	TEXT NOT NULL,
+	CONSTRAINT		fk_api_host_port_for_agents_controller
+		FOREIGN KEY	(controller_uuid)
+		REFERENCES	controller(uuid)
+);
 
 CREATE TABLE IF NOT EXISTS controller_node (
 	uuid			TEXT PRIMARY KEY,
@@ -178,43 +174,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_controller_node_upgrade_done_cnid_uiid
 ON controller_node_upgrade_done (controller_node_uuid, upgrade_info_id);
 
 /*
- * Models
- */
-CREATE TABLE IF NOT EXISTS model (
-	uuid					TEXT PRIMARY KEY,
-	name					TEXT,
-	type					TEXT,
-	life					INT,
-	controller_uuid			TEXT NOT NULL,
-	migration_mode			TEXT,
-	environ_version			INT,
-	cloud_uuid				TEXT NOT NULL,
-	cloud_region_uuid		TEXT,
-	cloud_credential_uuid	TEXT,
-	latest_available_tools	TEXT,
-	password_hash			TEXT,
-	force_destroyed			BOOLEAN,
-	destroy_timeout			INT,
-	controller_model		BOOLEAN,
-	meter_status			TEXT,
-	meter_info				TEXT,
-	-- owner
-	-- SLA
-	CONSTRAINT				fk_model_controller
-		FOREIGN KEY			(controller_uuid)
-		REFERENCES			controller(uuid),
-	CONSTRAINT				fk_model_cloud
-		FOREIGN KEY			(cloud_uuid)
-		REFERENCES			cloud(uuid),
-	CONSTRAINT				fk_model_cloud_region
-		FOREIGN KEY			(cloud_region_uuid)
-		REFERENCES			cloud_region(uuid),
-	CONSTRAINT				fk_model_cloud_credential
-		FOREIGN KEY			(cloud_credential_uuid)
-		REFERENCES			cloud_credential(uuid)
-);
-
-/*
  * Users
  */
 CREATE TABLE IF NOT EXISTS user (
@@ -226,16 +185,13 @@ CREATE TABLE IF NOT EXISTS user (
 	secret_key				TEXT,
 	password_hash			TEXT,
 	password_salt			TEXT,
-	created_by_user_uuid	TEXT NOT NULL,
+	created_by_user_uuid	TEXT,
 	date_created			TIMESTAMP,
 	last_login				TIMESTAMP,
-	last_login_model_uuid	TEXT NOT NULL,
+	last_login_model_uuid	TEXT, -- Not constrained to avoid circulate reference
 	CONSTRAINT				fk_user_created_by_user
 		FOREIGN KEY			(created_by_user_uuid)
-		REFERENCES			user(uuid),
-	CONSTRAINT				fk_user_last_login_model
-		FOREIGN KEY			(last_login_model_uuid)
-		REFERENCES			model(uuid)
+		REFERENCES			user(uuid)
 );
 
 CREATE INDEX IF NOT EXISTS idx_user_name
@@ -257,13 +213,114 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_user_controller_access_uid_cid
 ON user_controller_access (user_uuid, controller_uuid);
 
 /*
+ * Cloud Credentials
+ */
+CREATE TABLE IF NOT EXISTS cloud_credential (
+	uuid			TEXT PRIMARY KEY,
+	cloud_uuid		TEXT NOT NULL,
+	name			TEXT,
+	auth_type_id	INT NOT NULL,
+	revoked			BOOLEAN,
+	invalid			BOOLEAN,
+	invalid_reason	TEXT,
+	owner_uuid		TEXT NOT NULL,
+	CONSTRAINT		fk_cloud_credential_cloud
+		FOREIGN KEY	(cloud_uuid)
+		REFERENCES	cloud(uuid),
+	CONSTRAINT		fk_cloud_credential_auth_type
+		FOREIGN KEY	(auth_type_id)
+		REFERENCES	auth_type(id)
+	CONSTRAINT		fk_cloud_credential_owner
+		FOREIGN KEY	(owner_uuid)
+		REFERENCES	user(uuid)
+);
+
+CREATE TABLE IF NOT EXISTS cloud_credential_attribute (
+	uuid					TEXT PRIMARY KEY,
+	cloud_credential_uuid	TEXT NOT NULL,
+	key						TEXT,
+	value					TEXT,
+	CONSTRAINT				fk_cloud_credential_attribute_cloud_credential
+		FOREIGN KEY			(cloud_credential_uuid)
+		REFERENCES			cloud_credential(uuid)
+);
+
+/*
+ * Models
+ */
+CREATE TABLE IF NOT EXISTS sla (
+	id			INT PRIMARY KEY,
+	level		TEXT
+);
+
+INSERT INTO sla VALUES
+(
+	0,
+	"unsupported"
+), (
+	1,
+	"essential"
+), (
+	2,
+	"standard"
+), (
+	3,
+	"advanced"
+);
+
+CREATE TABLE IF NOT EXISTS model (
+	uuid					TEXT PRIMARY KEY,
+	name					TEXT,
+	type					TEXT,
+	life					INT,
+	owner_uuid				TEXT NOT NULL,
+	controller_uuid			TEXT NOT NULL,
+	migration_mode			TEXT,
+	environ_version			INT,
+	cloud_uuid				TEXT NOT NULL,
+	cloud_region_uuid		TEXT,
+	cloud_credential_uuid	TEXT,
+	latest_available_tools	TEXT,
+	sla_id					INT,
+	meter_status			TEXT,
+	meter_info				TEXT,
+	password_hash			TEXT,
+	force_destroyed			BOOLEAN,
+	destroy_timeout			INT,
+	controller_model		BOOLEAN,
+	CONSTRAINT				fk_model_owner
+		FOREIGN KEY			(owner_uuid)
+		REFERENCES			user(uuid),
+	CONSTRAINT				fk_model_controller
+		FOREIGN KEY			(controller_uuid)
+		REFERENCES			controller(uuid),
+	CONSTRAINT				fk_model_cloud
+		FOREIGN KEY			(cloud_uuid)
+		REFERENCES			cloud(uuid),
+	CONSTRAINT				fk_model_cloud_region
+		FOREIGN KEY			(cloud_region_uuid)
+		REFERENCES			cloud_region(uuid),
+	CONSTRAINT				fk_model_cloud_credential
+		FOREIGN KEY			(cloud_credential_uuid)
+		REFERENCES			cloud_credential(uuid),
+	CONSTRAINT				fk_model_sla
+		FOREIGN KEY			(sla_id)
+		REFERENCES			sla(id)
+);
+
+-- This unique index exists to ensure that two models,
+-- owned by the same user, cannot have the same name
+CREATE UNIQUE INDEX IF NOT EXISTS idx_model_name_oid
+ON model (name, owner_uuid);
+
+/*
  * Model Migrations
  */
 CREATE TABLE IF NOT EXISTS migration (
 	uuid					TEXT PRIMARY KEY,
 	model_uuid				TEXT NOT NULL,
 	attempt					INT,
-	initiated_by_user_id	TEXT NOT NULL,
+	initiated_by_user_uuid	TEXT NOT NULL,
 	target_controller_uuid	TEXT NOT NULL,
 	target_cacert			TEXT,
 	target_entity			TEXT,
@@ -282,7 +339,7 @@ CREATE TABLE IF NOT EXISTS migration (
 		FOREIGN KEY			(model_uuid)
 		REFERENCES			model(uuid),
 	CONSTRAINT				fk_migration_initiated_by_user
-		FOREIGN KEY			(initiated_by_user_id)
+		FOREIGN KEY			(initiated_by_user_uuid)
 		REFERENCES			user(uuid)
 	CONSTRAINT				fk_migration_target_controller
 		FOREIGN KEY			(target_controller_uuid)
@@ -319,4 +376,25 @@ ON global_setting (name);
 CREATE TABLE IF NOT EXISTS autocert_cache (
 	uuid			TEXT PRIMARY KEY,
 	name			TEXT
+);
+
+/*
+ * Singletons
+ */
+-- This table will have only 1 row
+CREATE TABLE IF NOT EXISTS state_serving_info (
+	id				INT PRIMARY KEY,
+	api_port		INT,
+	state_port		INT,
+	cert			TEXT,
+	private_key		TEXT,
+	ca_private_key	TEXT,
+	shared_secret	TEXT,
+	system_identity	TEXT
+);
+
+-- This table will have only 1 row
+CREATE TABLE IF NOT EXISTS hosted_model_count (
+	id				INT PRIMARY KEY,
+	ref_count		INT
 );
